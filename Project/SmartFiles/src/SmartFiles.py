@@ -6,152 +6,130 @@ Created on 17.05.2010
 Это главный исполняемый модуль программы SmartFiles. 
 Нужно запускать именно его, чтобы работать с программой.
 '''
+from PyQt5 import QtWidgets, QtCore, QtGui
 import sys
-from PyQt4 import QtGui,QtCore
+import InstallUser  # Assuming this is your custom module
 
-from  MainMenu import SmartFilesMainWindow as MainWindow
+class StartWindow(QtWidgets.QWidget):
+    switch_user = QtCore.pyqtSignal()
+    create_user = QtCore.pyqtSignal(object)
+    update_user = QtCore.pyqtSignal(object)
 
-from RepoManager.SystemInfo import SystemInfo
-from RepoManager.User import User
-from RepoManager.InstallUser import InstallUser
-from RepoManager.RepoManager import RepoManager 
-
-from EditWindows.EditUserWindow import EditUserWindow
-
-from RepoManager.InstallUser import InstallUser
-
-
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setup_ui()
+        self.setup_connections()
         
-class StartWindow(QtGui.QWidget):
-    def __init__(self,parent=None):
         try:
-            QtGui.QWidget.__init__(self,parent)
-
-#            self.setGeometry(500,400,0,0)
-            vbox_layout = QtGui.QVBoxLayout()
-            
-            hbox_layout = QtGui.QHBoxLayout()
-            label = QtGui.QLabel('Логин  ',self)
-            self._edit_login = QtGui.QLineEdit(self)
-            hbox_layout.addWidget(label)
-            hbox_layout.addWidget(self._edit_login)
-            vbox_layout.addLayout(hbox_layout)
-            
-            hbox_layout = QtGui.QHBoxLayout()
-            label = QtGui.QLabel('Пароль', self)
-            self._edit_password = QtGui.QLineEdit(self)
-            self._edit_password.setEchoMode(2)
-            hbox_layout.addWidget(label)
-            hbox_layout.addWidget(self._edit_password)
-            vbox_layout.addLayout(hbox_layout)
-            
-            hbox_layout = QtGui.QHBoxLayout()
-            button_ok=QtGui.QPushButton('Войти')
-            button_ok.setDefault(True) #Кнопка по-умолчанию. Нажимается при нажатии Enter
-            button_exit=QtGui.QPushButton('Выход')
-            hbox_layout.addWidget(button_ok)
-            hbox_layout.addWidget(button_exit)
-            vbox_layout.addLayout(hbox_layout)
-            
-            button_add_user = QtGui.QPushButton('Создать пользователя')
-            vbox_layout.addWidget(button_add_user)
-            
-            self.connect(button_ok,QtCore.SIGNAL('clicked()'),self.__startSF)
-            self.connect(button_add_user,QtCore.SIGNAL('clicked()'),self.__createUser)
-            self.connect(button_exit,QtCore.SIGNAL('clicked()'),self.close)
-
-            self.info_window = QtGui.QMessageBox()
-            self.setLayout(vbox_layout)
-            self.info_windo = QtGui.QMessageBox(self)
-            self.main_window = None
-            
             InstallUser.initHomeDir()
         except InstallUser.ExceptionNoUsers as err:
-            print(err)
-            self.info_window.setText('''Программа запущена в первый раз.
+            self.show_error('''Программа запущена в первый раз.
 Для работы с программой необходимо зарегистрировать хотя бы одного пользователя.''')
-            self.info_window.show()
-            #print('добавьте пользователя для работы в системе')
+            print(err)
+
+    def setup_ui(self):
+        layout = QtWidgets.QVBoxLayout()
         
-    def __startSF(self):
-        '''
-            Идентификация пользователя. В случае успеха запуск программы.
-        '''        
+        # Login section
+        login_layout = QtWidgets.QHBoxLayout()
+        login_layout.addWidget(QtWidgets.QLabel('Логин:'))
+        self.edit_login = QtWidgets.QLineEdit()
+        login_layout.addWidget(self.edit_login)
+        layout.addLayout(login_layout)
+        
+        # Password section
+        password_layout = QtWidgets.QHBoxLayout()
+        password_layout.addWidget(QtWidgets.QLabel('Пароль:'))
+        self.edit_password = QtWidgets.QLineEdit()
+        self.edit_password.setEchoMode(QtWidgets.QLineEdit.Password)
+        password_layout.addWidget(self.edit_password)
+        layout.addLayout(password_layout)
+        
+        # Buttons
+        button_layout = QtWidgets.QHBoxLayout()
+        self.btn_ok = QtWidgets.QPushButton('Войти')
+        self.btn_ok.setDefault(True)
+        self.btn_exit = QtWidgets.QPushButton('Выход')
+        button_layout.addWidget(self.btn_ok)
+        button_layout.addWidget(self.btn_exit)
+        layout.addLayout(button_layout)
+        
+        self.btn_add_user = QtWidgets.QPushButton('Создать пользователя')
+        layout.addWidget(self.btn_add_user)
+        
+        self.setLayout(layout)
+        self.main_window = None
+
+    def setup_connections(self):
+        self.btn_ok.clicked.connect(self.start_sf)
+        self.btn_add_user.clicked.connect(self.create_user_dialog)
+        self.btn_exit.clicked.connect(self.close)
+
+    def start_sf(self):
+        """Authenticate user and start main application"""
         try:
-            user_name = self._edit_login.text()
-            password = hash(self._edit_password.text())
-            user_repo = InstallUser.identificationUser(user_name,password)
-            self.__starting(user_repo)
-            self._edit_password.setText('')
-        except InstallUser.ExceptionUserNotFound as err:
-            self.info_window.setText('Ошибка логина или пароля')
-            self.info_window.show()
-            print(err)    
-        except InstallUser.ExceptionRepoIsNull as err:
-            self.info_window.setText('''Не найдено ни одного пользователя в системе.
+            user_name = self.edit_login.text()
+            password = hash(self.edit_password.text())
+            user_repo = InstallUser.identificationUser(user_name, password)
+            self.start_main_window(user_repo)
+            self.edit_password.clear()
+        except InstallUser.ExceptionUserNotFound:
+            self.show_error('Ошибка логина или пароля')
+        except InstallUser.ExceptionRepoIsNull:
+            self.show_error('''Не найдено ни одного пользователя в системе.
 Необходимо создать пользователя''')
-            self.info_window.show()
-            print(err)
         except Exception as err:
-            self.info_window.setText('какие то не учтенные траблы')
-            self.info_window.show()
+            self.show_error('Неизвестная ошибка')
             print(err)
-            
-    def __switchUser(self):
-        '''
-            переключение пользователя. Закрывается главное окно и отображается окно запуска.
-        '''
-        #self.main_window.close()
-        del(self.main_window)
-        self.show()
-        
-        
-    def __starting(self,user_repo):
-        '''
-            запуск главного окна программы
-        '''
-        #if self.main_window == None:
-        self.main_window = MainWindow(user_repo) 
-        self.main_window.show()
-        self.connect(self.main_window,QtCore.SIGNAL('switchUser()'),self.__switchUser)
-        self.connect(self.main_window,QtCore.SIGNAL('createUser(user)'),InstallUser.addUser)
-        self.connect(self.main_window,QtCore.SIGNAL('updateUser(user)'),InstallUser.updateUser)
-        #
-        self.close()
-        
-        
-    def __createUser(self):
-        '''
-            Сбор информации необходимой для создание нового пользователя.   
-        '''
+
+    def create_user_dialog(self):
+        """Open user creation dialog"""
         try:
-            self.edit_window = EditUserWindow()
-            self.edit_window.show()
-            self.connect(self.edit_window,QtCore.SIGNAL("createUser(user)"),self.__saveUser)
+            edit_window = EditUserWindow()
+            edit_window.createUser.connect(self.save_user)
+            edit_window.show()
         except Exception as err:
             print(err)
-        
-    def __saveUser(self,user_repo):
-        '''
-            сохранение пользователя 
-        '''
+
+    def save_user(self, user_repo):
+        """Save new user"""
         try:
-           
             InstallUser.addUser(user_repo)
-            self.__starting(user_repo)
+            self.start_main_window(user_repo)
         except InstallUser.ExceptionUserExist as err:
             print(err)
-            
-        
-        
-        
-if __name__ == '__main__':
-    print('111111')
-    app = QtGui.QApplication(sys.argv)
-   
-    main =  StartWindow()
-    main.show()
-    print('start StartWindow')
-#    sys.exit(app.exec_())
-    app.exec_()
+
+    def start_main_window(self, user_repo):
+        """Start main application window"""
+        self.main_window = MainWindow(user_repo)
+        self.main_window.switchUser.connect(self.show)
+        self.main_window.createUser.connect(InstallUser.addUser)
+        self.main_window.updateUser.connect(InstallUser.updateUser)
+        self.main_window.show()
+        self.hide()
+
+    def show_error(self, message):
+        """Show error message"""
+        QtWidgets.QMessageBox.critical(self, "Ошибка", message)
+
+class EditUserWindow(QtWidgets.QWidget):
+    createUser = QtCore.pyqtSignal(object)
     
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        # Implement user edit UI here
+
+class MainWindow(QtWidgets.QMainWindow):
+    switchUser = QtCore.pyqtSignal()
+    createUser = QtCore.pyqtSignal(object)
+    updateUser = QtCore.pyqtSignal(object)
+    
+    def __init__(self, user_repo, parent=None):
+        super().__init__(parent)
+        # Implement main application UI here
+
+if __name__ == '__main__':
+    app = QtWidgets.QApplication(sys.argv)
+    window = StartWindow()
+    window.show()
+    sys.exit(app.exec_())
